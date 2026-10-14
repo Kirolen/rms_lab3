@@ -15,6 +15,8 @@ from PySide6.QtCore import Qt
 
 from processing.compression import retain_largest
 from processing.metrics import calculate_psnr
+from processing.experiments import run_experiments
+from ui.experiment_dialog import ExperimentDialog
 from processing.dct import forward_dct, inverse_dct
 from processing.dwt import forward_haar, inverse_haar
 from processing.image_io import (
@@ -105,6 +107,10 @@ class MainWindow(QMainWindow):
         compression_layout.addWidget(self.compression_label)
         compression_layout.addWidget(self.compression_slider, stretch=1)
         layout.addLayout(compression_layout)
+        self.experiment_button = QPushButton("Експеримент: 50% / 10% / 1%")
+        self.experiment_button.setEnabled(False)
+        self.experiment_button.clicked.connect(self._run_experiments)
+        layout.addWidget(self.experiment_button)
 
         self.original_panel = ImagePanel("Original", "Зображення не завантажено")
         self.original_panel.metrics_label.setText("Підготовлене зображення · 512×512 · 8 біт")
@@ -143,6 +149,7 @@ class MainWindow(QMainWindow):
         self.dct_button.setEnabled(True)
         self.dwt_button.setEnabled(True)
         self.compression_slider.setEnabled(True)
+        self.experiment_button.setEnabled(True)
         self.image_info.setText(
             f"{Path(file_path).name} · {original_size[0]}×{original_size[1]} → 512×512 · відтінки сірого"
         )
@@ -197,3 +204,10 @@ class MainWindow(QMainWindow):
             image_to_array(self.original_image), image_to_array(image),
         )
         panel.set_metrics(psnr, int(np.count_nonzero(coefficients)), coefficients.size)
+
+    def _run_experiments(self):
+        if self.original_image is None:
+            return
+        results = run_experiments(image_to_array(self.original_image))
+        dialog = ExperimentDialog(results, Path(self.image_path).name, self)
+        dialog.exec()
