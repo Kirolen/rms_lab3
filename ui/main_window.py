@@ -5,11 +5,14 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
 from pathlib import Path
+from PySide6.QtCore import Qt
 
+from processing.compression import retain_largest
 from processing.dct import forward_dct, inverse_dct
 from processing.dwt import forward_haar, inverse_haar
 from processing.image_io import (
@@ -89,6 +92,18 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.image_info, stretch=1)
         layout.addLayout(toolbar)
 
+        self.compression_label = QLabel("Зберегти коефіцієнтів: 100%")
+        self.compression_slider = QSlider(Qt.Orientation.Horizontal)
+        self.compression_slider.setRange(1, 100)
+        self.compression_slider.setValue(100)
+        self.compression_slider.setEnabled(False)
+        self.compression_slider.setTracking(False)
+        self.compression_slider.valueChanged.connect(self._change_compression)
+        compression_layout = QHBoxLayout()
+        compression_layout.addWidget(self.compression_label)
+        compression_layout.addWidget(self.compression_slider, stretch=1)
+        layout.addLayout(compression_layout)
+
         self.original_panel = ImagePanel("Original", "Зображення не завантажено")
         self.dct_panel = ImagePanel("DCT", "Результат косинусного перетворення")
         self.dwt_panel = ImagePanel("DWT", "Результат вейвлет-перетворення Хаара")
@@ -124,6 +139,7 @@ class MainWindow(QMainWindow):
         self.dwt_panel.clear_image()
         self.dct_button.setEnabled(True)
         self.dwt_button.setEnabled(True)
+        self.compression_slider.setEnabled(True)
         self.image_info.setText(
             f"{Path(file_path).name} · {original_size[0]}×{original_size[1]} → 512×512 · відтінки сірого"
         )
@@ -136,10 +152,11 @@ class MainWindow(QMainWindow):
             return
         original = image_to_array(self.original_image)
         self.dct_coefficients = forward_dct(original)
-        restored = inverse_dct(self.dct_coefficients)
+        filtered = retain_largest(self.dct_coefficients, self.compression_slider.value())
+        restored = inverse_dct(filtered)
         self.dct_panel.set_image(array_to_image(restored))
         self.statusBar().showMessage(
-            "DCT: пряме та обернене перетворення блоків 8×8. Усі коефіцієнти збережено."
+            f"DCT: блоки 8×8. Збережено до {self.compression_slider.value()}% найбільших коефіцієнтів."
         )
 
     def run_dwt(self):
@@ -147,8 +164,27 @@ class MainWindow(QMainWindow):
             return
         original = image_to_array(self.original_image)
         self.dwt_coefficients = forward_haar(original)
-        restored = inverse_haar(self.dwt_coefficients)
+        filtered = retain_largest(self.dwt_coefficients, self.compression_slider.value())
+        restored = inverse_haar(filtered)
         self.dwt_panel.set_image(array_to_image(restored))
         self.statusBar().showMessage(
-            "DWT: пряме та обернене перетворення Хаара, 3 рівні. Усі коефіцієнти збережено."
+            f"DWT: Хаар, 3 рівні. Збережено до {self.compression_slider.value()}% найбільших коефіцієнтів."
+        )
+
+    def _change_compression(self, percent):
+        self.compression_label.setText(f"Зберегти коефіцієнтів: {percent}%")
+        if self.original_image is None:
+            return
+        if self.dct_coefficients is None:
+            self.dct_coefficients = forward_dct(image_to_array(self.original_image))
+        if self.dwt_coefficients is None:
+            self.dwt_coefficients = forward_haar(image_to_array(self.original_image))
+        self.dct_panel.set_image(array_to_image(inverse_dct(
+            retain_largest(self.dct_coefficients, percent)
+        )))
+        self.dwt_panel.set_image(array_to_image(inverse_haar(
+            retain_largest(self.dwt_coefficients, percent)
+        )))
+        self.statusBar().showMessage(
+            f"Збережено до {percent}% коефіцієнтів DCT і DWT. Решту обнулено."
         )
