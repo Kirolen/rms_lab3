@@ -10,9 +10,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from pathlib import Path
+import numpy as np
 from PySide6.QtCore import Qt
 
 from processing.compression import retain_largest
+from processing.metrics import calculate_psnr
 from processing.dct import forward_dct, inverse_dct
 from processing.dwt import forward_haar, inverse_haar
 from processing.image_io import (
@@ -105,6 +107,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(compression_layout)
 
         self.original_panel = ImagePanel("Original", "Зображення не завантажено")
+        self.original_panel.metrics_label.setText("Підготовлене зображення · 512×512 · 8 біт")
         self.dct_panel = ImagePanel("DCT", "Результат косинусного перетворення")
         self.dwt_panel = ImagePanel("DWT", "Результат вейвлет-перетворення Хаара")
 
@@ -154,7 +157,7 @@ class MainWindow(QMainWindow):
         self.dct_coefficients = forward_dct(original)
         filtered = retain_largest(self.dct_coefficients, self.compression_slider.value())
         restored = inverse_dct(filtered)
-        self.dct_panel.set_image(array_to_image(restored))
+        self._show_result(self.dct_panel, restored, filtered)
         self.statusBar().showMessage(
             f"DCT: блоки 8×8. Збережено до {self.compression_slider.value()}% найбільших коефіцієнтів."
         )
@@ -166,7 +169,7 @@ class MainWindow(QMainWindow):
         self.dwt_coefficients = forward_haar(original)
         filtered = retain_largest(self.dwt_coefficients, self.compression_slider.value())
         restored = inverse_haar(filtered)
-        self.dwt_panel.set_image(array_to_image(restored))
+        self._show_result(self.dwt_panel, restored, filtered)
         self.statusBar().showMessage(
             f"DWT: Хаар, 3 рівні. Збережено до {self.compression_slider.value()}% найбільших коефіцієнтів."
         )
@@ -179,12 +182,18 @@ class MainWindow(QMainWindow):
             self.dct_coefficients = forward_dct(image_to_array(self.original_image))
         if self.dwt_coefficients is None:
             self.dwt_coefficients = forward_haar(image_to_array(self.original_image))
-        self.dct_panel.set_image(array_to_image(inverse_dct(
-            retain_largest(self.dct_coefficients, percent)
-        )))
-        self.dwt_panel.set_image(array_to_image(inverse_haar(
-            retain_largest(self.dwt_coefficients, percent)
-        )))
+        dct_filtered = retain_largest(self.dct_coefficients, percent)
+        dwt_filtered = retain_largest(self.dwt_coefficients, percent)
+        self._show_result(self.dct_panel, inverse_dct(dct_filtered), dct_filtered)
+        self._show_result(self.dwt_panel, inverse_haar(dwt_filtered), dwt_filtered)
         self.statusBar().showMessage(
             f"Збережено до {percent}% коефіцієнтів DCT і DWT. Решту обнулено."
         )
+
+    def _show_result(self, panel, restored, coefficients):
+        image = array_to_image(restored)
+        panel.set_image(image)
+        psnr = calculate_psnr(
+            image_to_array(self.original_image), image_to_array(image),
+        )
+        panel.set_metrics(psnr, int(np.count_nonzero(coefficients)), coefficients.size)

@@ -24,6 +24,16 @@ class ImagePanel(QFrame):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.addWidget(title_label)
         layout.addWidget(self.image_label, stretch=1)
+        self.metrics_label = QLabel("PSNR: — | Коефіцієнти: —")
+        self.metrics_label.setWordWrap(True)
+        self.metrics_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.metrics_label)
+
+    def set_metrics(self, psnr, count, total):
+        quality = "∞" if psnr == float("inf") else f"{psnr:.2f} дБ"
+        self.metrics_label.setText(
+            f"PSNR: {quality}\nНенульові коефіцієнти: {count:,} / {total:,} ({count / total * 100:.2f}%)"
+        )
 
     def set_image(self, image):
         self._image = image.copy()
@@ -33,6 +43,7 @@ class ImagePanel(QFrame):
         self._image = None
         self.image_label.clear()
         self.image_label.setText(self._placeholder)
+        self.metrics_label.setText("PSNR: — | Коефіцієнти: —")
 
     def _update_preview(self):
         if self._image is None:
