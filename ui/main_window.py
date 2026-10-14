@@ -110,7 +110,13 @@ class MainWindow(QMainWindow):
         self.experiment_button = QPushButton("Експеримент: 50% / 10% / 1%")
         self.experiment_button.setEnabled(False)
         self.experiment_button.clicked.connect(self._run_experiments)
-        layout.addWidget(self.experiment_button)
+        self.save_button = QPushButton("Зберегти результати PNG")
+        self.save_button.setEnabled(False)
+        self.save_button.clicked.connect(self._save_images)
+        actions_layout = QHBoxLayout()
+        actions_layout.addWidget(self.experiment_button)
+        actions_layout.addWidget(self.save_button)
+        layout.addLayout(actions_layout)
 
         self.original_panel = ImagePanel("Original", "Зображення не завантажено")
         self.original_panel.metrics_label.setText("Підготовлене зображення · 512×512 · 8 біт")
@@ -146,6 +152,7 @@ class MainWindow(QMainWindow):
         self.original_panel.set_image(image)
         self.dct_panel.clear_image()
         self.dwt_panel.clear_image()
+        self.save_button.setEnabled(False)
         self.dct_button.setEnabled(True)
         self.dwt_button.setEnabled(True)
         self.compression_slider.setEnabled(True)
@@ -204,6 +211,29 @@ class MainWindow(QMainWindow):
             image_to_array(self.original_image), image_to_array(image),
         )
         panel.set_metrics(psnr, int(np.count_nonzero(coefficients)), coefficients.size)
+        self.save_button.setEnabled(True)
+
+    def _save_images(self):
+        directory = QFileDialog.getExistingDirectory(self, "Папка для результатів")
+        if directory:
+            try:
+                self.save_images(directory)
+            except OSError as error:
+                QMessageBox.warning(self, "Помилка збереження", str(error))
+
+    def save_images(self, directory):
+        percent = self.compression_slider.value()
+        images = {"original.png": self.original_image}
+        for name, panel in (("dct", self.dct_panel), ("dwt", self.dwt_panel)):
+            if panel._image is not None:
+                images[f"{name}_keep_{percent}.png"] = panel._image
+        paths = [Path(directory) / name for name in images]
+        if any(path.exists() for path in paths):
+            raise OSError("У папці вже є результати з такими назвами. Виберіть іншу папку.")
+        for name, image in images.items():
+            if image is None or not image.save(str(Path(directory) / name), "PNG"):
+                raise OSError(f"Не вдалося зберегти {name}")
+        self.statusBar().showMessage(f"Збережено {len(images)} зображень у {directory}")
 
     def _run_experiments(self):
         if self.original_image is None:
