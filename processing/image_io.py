@@ -1,5 +1,6 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QImage, QImageReader, QPainter
+import numpy as np
 
 
 def load_grayscale_image(file_path, size=512):
@@ -21,3 +22,20 @@ def load_grayscale_image(file_path, size=512):
     painter.drawImage((size - scaled.width()) // 2, (size - scaled.height()) // 2, scaled)
     painter.end()
     return canvas.convertToFormat(QImage.Format.Format_Grayscale8), original_size
+
+
+def image_to_array(image):
+    grayscale = image.convertToFormat(QImage.Format.Format_Grayscale8)
+    rows = np.frombuffer(grayscale.constBits(), dtype=np.uint8).reshape(
+        grayscale.height(), grayscale.bytesPerLine(),
+    )
+    return rows[:, :grayscale.width()].astype(np.float64)
+
+
+def array_to_image(values):
+    pixels = np.ascontiguousarray(np.clip(np.rint(values), 0, 255), dtype=np.uint8)
+    height, width = pixels.shape
+    return QImage(
+        pixels.data, width, height, pixels.strides[0],
+        QImage.Format.Format_Grayscale8,
+    ).copy()

@@ -10,7 +10,12 @@ from PySide6.QtWidgets import (
 )
 from pathlib import Path
 
-from processing.image_io import load_grayscale_image
+from processing.dct import forward_dct, inverse_dct
+from processing.image_io import (
+    array_to_image,
+    image_to_array,
+    load_grayscale_image,
+)
 from ui.image_panel import ImagePanel
 
 
@@ -45,6 +50,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.original_image = None
         self.image_path = None
+        self.dct_coefficients = None
         self.setWindowTitle("Стиснення зображень — DCT / DWT")
         self.resize(1100, 650)
         self.setMinimumSize(760, 480)
@@ -65,11 +71,15 @@ class MainWindow(QMainWindow):
 
         self.open_button = QPushButton("Відкрити зображення")
         self.open_button.clicked.connect(self._open_image)
+        self.dct_button = QPushButton("Виконати DCT")
+        self.dct_button.setEnabled(False)
+        self.dct_button.clicked.connect(self.run_dct)
         self.image_info = QLabel("Зображення не вибрано")
         self.image_info.setWordWrap(True)
         self.image_info.setObjectName("subtitle")
         toolbar = QHBoxLayout()
         toolbar.addWidget(self.open_button)
+        toolbar.addWidget(self.dct_button)
         toolbar.addWidget(self.image_info, stretch=1)
         layout.addLayout(toolbar)
 
@@ -100,13 +110,26 @@ class MainWindow(QMainWindow):
             return False
 
         self.original_image = image
+        self.dct_coefficients = None
         self.image_path = str(file_path)
         self.original_panel.set_image(image)
         self.dct_panel.clear_image()
         self.dwt_panel.clear_image()
+        self.dct_button.setEnabled(True)
         self.image_info.setText(
             f"{Path(file_path).name} · {original_size[0]}×{original_size[1]} → 512×512 · відтінки сірого"
         )
         self.image_info.setToolTip(str(file_path))
         self.statusBar().showMessage("Зображення підготовлено. Пропорції збережено; вільні поля заповнено чорним.")
         return True
+
+    def run_dct(self):
+        if self.original_image is None:
+            return
+        original = image_to_array(self.original_image)
+        self.dct_coefficients = forward_dct(original)
+        restored = inverse_dct(self.dct_coefficients)
+        self.dct_panel.set_image(array_to_image(restored))
+        self.statusBar().showMessage(
+            "DCT: пряме та обернене перетворення блоків 8×8. Усі коефіцієнти збережено."
+        )
